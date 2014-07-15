@@ -4,7 +4,6 @@ import Data.BitArray
 import Data.Word
 import Data.Char
 import Text.Printf (printf)
-import Data.Binary as BN
 
 type GZipFlags = Word8
 
@@ -72,7 +71,14 @@ main = do
                 extraFlags = uint8 !! 8,
                 os = uint8 !! 9
             }
-    return header
+        magicID = magicWords header
+        comp = compressionMethod header
+    -- check for correct magic word and compression type    
+    case magicID of
+        [31, 139]   -> case comp of
+                            8 -> return header
+                            _ -> error $ "Invalid file compresion."
+        _           -> error $ "Invalid magic words."
 
 -- Checks for various flags
 hasAscii flag = ((toBool $ toBinary $ fromIntegral flag) !! 7) && True
