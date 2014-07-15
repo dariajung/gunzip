@@ -112,6 +112,12 @@ getGZipMetadata = do
                                     str = map chr $ map (fromIntegral) $ unpacked
                                 return (encodeWord8 len, str)
                         False -> do return (0 :: Word16, "")
+    _fname <- case (hasName $ flags header) of
+                True -> do
+                        let _uint8 = drop (fromIntegral _xlen) uint8
+                            __fname = getUntil _uint8 (0 :: Word8)
+                        return (C.unpack $ B.pack $ __fname)
+                False -> do return ""
 
     print unnecessary
 
