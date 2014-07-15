@@ -32,8 +32,8 @@ data GZipMetadata = GZipMetadata {
     extra :: [Char],
     fname :: [Char],
     fcomment :: [Char],
-    crc16 :: Word16 -- four bytes
-} deriving (Show)
+    crc16 :: Word16 -- two bytes
+}
 
 data BlockFormat = BlockFormat {
     last :: Bool,
@@ -64,7 +64,7 @@ toHex bytes = C.unpack bytes >>= printf "%02x"
 
 -- Magic numbers are: 0x1f and 0x8b, or 31 and 139
 
---getGZipHeader :: IO GZipHeader
+getGZipHeader :: IO GZipHeader
 getGZipHeader = do
     handle <- openBinaryFile gzfile ReadMode
     _magic <- B.hGet handle 2
@@ -90,19 +90,14 @@ getGZipHeader = do
                             _ -> error $ "Invalid file compresion."
         _           -> error $ "Invalid magic words."
 
--- getGZipMetadata :: IO GZipMetadata
+getGZipMetadata :: IO GZipMetadata
 getGZipMetadata = do
-    header <- getGZipHeader
+    _header <- getGZipHeader
     contents <- B.readFile gzfile
     handle <- openBinaryFile gzfile ReadMode
     unnecessary <- B.hGet handle 10
     let uint8 = drop 10 $ B.unpack contents
-        --_xlen = map (\x -> x :: Word8) [0, 0]
-        --_extra = ""
-        --_fname = ""
-        --_fcomment = ""
-        --crc16 = map (\x -> x :: Word8) [0, 0]
-    (_xlen, _extra) <- case (hasExtra $ flags header) of
+    (_xlen, _extra) <- case (hasExtra $ flags _header) of
                         True -> do
                                 __xlen <- B.hGet handle 2
                                 let len = B.unpack __xlen
@@ -112,14 +107,34 @@ getGZipMetadata = do
                                     str = map chr $ map (fromIntegral) $ unpacked
                                 return (encodeWord8 len, str)
                         False -> do return (0 :: Word16, "")
-    _fname <- case (hasName $ flags header) of
+    _fname <- case (hasName $ flags _header) of
                 True -> do
                         let _uint8 = drop (fromIntegral _xlen) uint8
                             __fname = getUntil _uint8 (0 :: Word8)
+                        updateHandle <- B.hGet handle (length __fname)
                         return (C.unpack $ B.pack $ __fname)
                 False -> do return ""
+    _fcomment <- case (hasComment $ flags _header) of
+                    True -> do
+                        let _uint8 = drop (length _fname) $ drop (fromIntegral _xlen) uint8
+                            __fcomment = getUntil _uint8 (0 :: Word8)
+                        updateHandle <- B.hGet handle (length __fcomment + 1)
+                        return (C.unpack $ B.pack $ __fcomment)
+                    False -> do return ""
+    _crc16 <- case (hasCrc $ flags _header) of 
+                True -> do
+                    crc <- B.hGet handle 2
+                    return $ encodeWord8 (B.unpack crc)
+                False -> do return (0 :: Word16)
 
-    print unnecessary
+    return $ GZipMetadata {
+                header = _header,
+                xlen = _xlen,
+                extra = _extra,
+                fname = _fname,
+                fcomment = _fcomment,
+                crc16 = _crc16
+            }
 
 getUntil (x:xs) char 
     | x == char         = []
@@ -135,8 +150,8 @@ encodeWord16 x = map fromIntegral [ x .&. 0xFF, (x .&. 0xFF00) `shiftR` 8 ]
 hasAscii :: Integral a => a -> Bool
 hasAscii flag = ((toBool $ toBinary $ fromIntegral flag) !! 7) && True
 
-hasCont :: Integral a => a -> Bool
-hasCont flag =  ((toBool $ toBinary $ fromIntegral flag) !! 6) && True
+hasCrc :: Integral a => a -> Bool
+hasCrc flag =  ((toBool $ toBinary $ fromIntegral flag) !! 6) && True
 
 hasExtra :: Integral a => a -> Bool
 hasExtra flag = ((toBool $ toBinary $ fromIntegral flag) !! 5) && True
