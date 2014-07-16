@@ -42,7 +42,7 @@ data GZipMetadata = GZipMetadata {
 
 data BlockFormat = BlockFormat {
     last :: Bool,
-    blockType :: IORef [Int] -- length 2
+    blockType :: IORef [Bool] -- length 2
 }
 
 data HuffmanHeader = HuffmanHeader {
@@ -118,7 +118,7 @@ getGZipMetadata = do
                 True -> do
                         let _uint8 = drop (fromIntegral _xlen) uint8
                             __fname = getUntil _uint8 (0 :: Word8)
-                        updateHandle <- B.hGet handle (length __fname)
+                        updateHandle <- B.hGet handle (length __fname + 1)
                         return (C.unpack $ B.pack $ __fname)
                 False -> do return ""
     _fcomment <- case (hasComment $ flags _header) of
@@ -185,42 +185,31 @@ makeInt l = helper 0x00 l
         helper n arr@(x:xs) = helper ((n `shiftL` 1) + x) xs
         helper n [] = n
 
-test = do 
-    handle <- openBinaryFile gzfile ReadMode
-    bvector <- newIORef []
-    let a = BitStream {
-                stream = handle,
-                bv = bvector
-            }
-
-    ok <- readBits a 8
-    print ok
-
 -- need to make sure this works properly
 readBits :: BitStream -> Int -> IO [Int]
 readBits bs n = do 
     let handle = stream bs
     cached_bits <- readIORef (bv bs)
-    let bytesToRead = if n > length cached_bits then n - length cached_bits else 0
-    bytes <- B.hGet handle bytesToRead
-    let updated_cache_bits = readBitsHelper n cached_bits (B.unpack bytes)
-        streamBV = drop n updated_cache_bits
-    -- remove this block later
-    before <- readIORef $ bv bs
-    print before
-    writeIORef (bv bs) streamBV
-    after <- readIORef $ bv bs
-    print (after) 
-    -- remove this block later
-    return $ take n updated_cache_bits
 
-readBitsHelper :: (Integral t, Num a, Bits a) => Int -> [a] -> [t] -> [a]
-readBitsHelper n cachedBits (x:xs)
-    | n > length cachedBits         = readBitsHelper n (cachedBits ++ newBits) xs
-    | otherwise                     = cachedBits
-    where
-        newBits = makeBitVector x
-readBitsHelper n cachedBits [] = cachedBits
+    let updated_cache_bits = readBitsHelper n cached_bits handle   
+    _updated_cache_bits <- updated_cache_bits
+
+    let streamBV = drop n _updated_cache_bits
+
+    writeIORef (bv bs) streamBV
+
+    return $ take n _updated_cache_bits
+
+readBitsHelper n cached_bits handle = 
+    case greater of
+        True    -> do 
+                    byte <- B.hGet handle 1
+                    let new_bits = makeBitVector (head $ B.unpack byte)
+                        _cached_bits = cached_bits ++ new_bits
+                    readBitsHelper n _cached_bits handle
+        False   -> return cached_bits
+
+    where greater = n > length cached_bits
 
 -- read bits from stream and output decimal value
 readBitsInv :: BitStream -> Int -> IO Int
@@ -232,7 +221,7 @@ readBitsInv bs n = do
 getBlockFormat :: BitStream -> IO BlockFormat
 getBlockFormat bs = do
     bits <- readBits bs 3
-    btype <- newIORef $ drop 1 bits
+    btype <- newIORef $ map (\x -> if x == 1 then True else False) (drop 1 bits)
     return $ BlockFormat {
                 GunZip.last = if head bits == 1 then True else False,
                 blockType = btype
@@ -246,10 +235,10 @@ inflate = do
                 bv = arr
             }
 
-    readHuffmanStream bs
+    getHuffmanHeader bs
 
--- just testing things out
-readHuffmanStream bstream = do
+getHuffmanHeader :: BitStream -> IO HuffmanHeader
+getHuffmanHeader bstream = do
     lit <- readBitsInv bstream 5
     dist <- readBitsInv bstream 5
     len <- readBitsInv bstream 4
@@ -257,3 +246,11 @@ readHuffmanStream bstream = do
     print lit
     print dist
     print len
+
+    return $ HuffmanHeader {
+                hlit = fromIntegral lit,
+                hdist = fromIntegral dist,
+                hclen = fromIntegral len
+            }
+
+
