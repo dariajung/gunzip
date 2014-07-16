@@ -46,7 +46,9 @@ data BlockFormat = BlockFormat {
 }
 
 data HuffmanHeader = HuffmanHeader {
-    
+    hlit :: Word8,
+    hdist :: Word8,
+    hclen :: Word8
 }
 
 -- translate bytes to binary
