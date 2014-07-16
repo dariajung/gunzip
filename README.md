@@ -49,3 +49,4 @@ Resources
 - [Algorithm specifications](http://www.gzip.org/algorithm.txt)
 - [Format information](http://www.gzip.org/format.txt)
 - [Gunzip in Julia by Julia Evans](https://github.com/jvns/gzip.jl/blob/master/gzip.jl)
+- [Dissecting the GZip format](http://www.infinitepartitions.com/art001.html)
