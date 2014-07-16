@@ -7,7 +7,6 @@ import Data.Char
 import Text.Printf (printf)
 import System.IO 
 import Data.Bits
---import Data.Array.IO
 import Data.IORef
 
 
@@ -177,11 +176,29 @@ makeBitVector x = helper (fromIntegral x) []
             | length l == 8     = l
             | otherwise         =  helper (n `shiftR` 1) (l ++ [n .&. 0x1])
 
--- interprets binary as in little endian format
+-- interprets binary param as in little endian format
 makeInt :: [Int] -> Int
 makeInt l = helper 0x00 l
     where 
         helper n arr@(x:xs) = helper ((n `shiftL` 1) + x) xs
         helper n [] = n
 
+
+readBits :: BitStream -> Int -> IO [Int]
+readBits bs n = do 
+    handle <- stream bs
+    cached_bits <- readIORef (bv bs)
+    let bytesToRead = length cached_bits - n
+    bytes <- B.hGet handle bytesToRead
+    let updated_cache_bits = readBitsHelper n cached_bits (B.unpack bytes)
+        streamBV = drop n updated_cache_bits
+    writeIORef (bv bs) streamBV
+    return $ take n updated_cache_bits
+
+readBitsHelper :: (Integral t, Num a, Bits a) => Int -> [a] -> [t] -> [a]
+readBitsHelper n cachedBits (x:xs)
+    | n > length cachedBits         = readBitsHelper n (cachedBits ++ newBits) xs
+    | otherwise                     = cachedBits
+    where
+        newBits = makeBitVector x
 
