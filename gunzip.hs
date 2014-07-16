@@ -15,7 +15,7 @@ gzfile = "keats.txt.gz"
 type GZipFlags = Word8
 
 data BitStream = BitStream {
-    stream :: IO Handle,
+    stream :: Handle,
     bv :: IORef [Int] 
     -- not sure how bit vectors work in haskell so just using [Int] as a BV
     -- IORef allows mutability
@@ -183,16 +183,33 @@ makeInt l = helper 0x00 l
         helper n arr@(x:xs) = helper ((n `shiftL` 1) + x) xs
         helper n [] = n
 
+test = do 
+    handle <- openBinaryFile gzfile ReadMode
+    bvector <- newIORef []
+    let a = BitStream {
+                stream = handle,
+                bv = bvector
+            }
 
+    ok <- readBits a 8
+    print ok
+
+-- need to make sure this works properly
 readBits :: BitStream -> Int -> IO [Int]
 readBits bs n = do 
-    handle <- stream bs
+    let handle = stream bs
     cached_bits <- readIORef (bv bs)
-    let bytesToRead = length cached_bits - n
+    let bytesToRead = if n > length cached_bits then n - length cached_bits else 0
     bytes <- B.hGet handle bytesToRead
     let updated_cache_bits = readBitsHelper n cached_bits (B.unpack bytes)
         streamBV = drop n updated_cache_bits
+    -- remove this block later
+    before <- readIORef $ bv bs
+    print before
     writeIORef (bv bs) streamBV
+    after <- readIORef $ bv bs
+    print (after) 
+    -- remove this block later
     return $ take n updated_cache_bits
 
 readBitsHelper :: (Integral t, Num a, Bits a) => Int -> [a] -> [t] -> [a]
@@ -201,4 +218,11 @@ readBitsHelper n cachedBits (x:xs)
     | otherwise                     = cachedBits
     where
         newBits = makeBitVector x
+
+-- read bits from stream and output decimal value
+readBitsInv :: BitStream -> Int -> IO Int
+readBitsInv bs n = do
+    bits <- readBits bs n
+    let reversed = reverse bits
+    return $ makeInt reversed
 
