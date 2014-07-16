@@ -1,19 +1,25 @@
+module GunZip where
+
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
-import Data.BitArray
 import Data.Word
 import Data.Char
 import Text.Printf (printf)
 import System.IO 
 import Data.Bits
+--import Data.Array.IO
+import Data.IORef
+
 
 gzfile = "keats.txt.gz"
 
 type GZipFlags = Word8
 
 data BitStream = BitStream {
-    stream :: IO (),
-    bv :: BitArray
+    stream :: IO Handle,
+    bv :: IORef [Int] 
+    -- not sure how bit vectors work in haskell so just using [Int] as a BV
+    -- IORef allows mutability
 }
 
 -- total of 10 bytes
@@ -37,8 +43,8 @@ data GZipMetadata = GZipMetadata {
 
 data BlockFormat = BlockFormat {
     last :: Bool,
-    blockType :: BitArray -- length 2
-} deriving (Show)
+    blockType :: IORef [Int] -- length 2
+}
 
 data HuffmanHeader = HuffmanHeader {
     
@@ -136,6 +142,7 @@ getGZipMetadata = do
                 crc16 = _crc16
             }
 
+getUntil :: Eq a => [a] -> a -> [a]
 getUntil (x:xs) char 
     | x == char         = []
     | otherwise         = x : getUntil xs char
@@ -161,3 +168,20 @@ hasName flag =  ((toBool $ toBinary $ fromIntegral flag) !! 4) && True
 
 hasComment :: Integral a => a -> Bool
 hasComment flag = ((toBool $ toBinary $ fromIntegral flag) !! 3) && True
+
+-- outputs in big endian
+makeBitVector :: (Integral a1, Num a, Bits a) => a1 -> [a]
+makeBitVector x = helper (fromIntegral x) []
+    where 
+        helper n l
+            | length l == 8     = l
+            | otherwise         =  helper (n `shiftR` 1) (l ++ [n .&. 0x1])
+
+-- interprets binary as in little endian format
+makeInt :: [Int] -> Int
+makeInt l = helper 0x00 l
+    where 
+        helper n arr@(x:xs) = helper ((n `shiftL` 1) + x) xs
+        helper n [] = n
+
+
