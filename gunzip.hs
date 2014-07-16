@@ -97,7 +97,7 @@ getGZipHeader = do
                             _ -> error $ "Invalid file compresion."
         _           -> error $ "Invalid magic words."
 
-getGZipMetadata :: IO GZipMetadata
+getGZipMetadata :: IO (GZipMetadata, Handle)
 getGZipMetadata = do
     _header <- getGZipHeader
     contents <- B.readFile gzfile
@@ -134,14 +134,14 @@ getGZipMetadata = do
                     return $ encodeWord8 (B.unpack crc)
                 False -> do return (0 :: Word16)
 
-    return $ GZipMetadata {
+    return $ (GZipMetadata {
                 header = _header,
                 xlen = _xlen,
                 extra = _extra,
                 fname = _fname,
                 fcomment = _fcomment,
                 crc16 = _crc16
-            }
+            }, handle)
 
 getUntil :: Eq a => [a] -> a -> [a]
 getUntil (x:xs) char 
@@ -220,6 +220,7 @@ readBitsHelper n cachedBits (x:xs)
     | otherwise                     = cachedBits
     where
         newBits = makeBitVector x
+readBitsHelper n cachedBits [] = cachedBits
 
 -- read bits from stream and output decimal value
 readBitsInv :: BitStream -> Int -> IO Int
@@ -228,3 +229,31 @@ readBitsInv bs n = do
     let reversed = reverse bits
     return $ makeInt reversed
 
+getBlockFormat :: BitStream -> IO BlockFormat
+getBlockFormat bs = do
+    bits <- readBits bs 3
+    btype <- newIORef $ drop 1 bits
+    return $ BlockFormat {
+                GunZip.last = if head bits == 1 then True else False,
+                blockType = btype
+            } 
+
+inflate = do
+    (metadata, handle) <- getGZipMetadata
+    arr <- newIORef []
+    let bs = BitStream {
+                stream = handle,
+                bv = arr
+            }
+
+    readHuffmanStream bs
+
+-- just testing things out
+readHuffmanStream bstream = do
+    lit <- readBitsInv bstream 5
+    dist <- readBitsInv bstream 5
+    len <- readBitsInv bstream 4
+
+    print lit
+    print dist
+    print len
