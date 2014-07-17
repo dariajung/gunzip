@@ -250,19 +250,6 @@ getHuffmanHeader bstream = do
                 hclen = fromIntegral len
             }
 
--- define Huffman tree & nodes
-
-data InternalNode a = InternalNode {
-    zero :: Node a, -- left
-    one :: Node a -- right
-} deriving (Show)
-
-data Node a = EmptyNode
-            | LeafNode { label :: a }
-    deriving (Show)
-
-type HuffmanTree = InternalNode
-
 createCodeTable :: (Num a, Ord t, Bits a) => [Int] -> [t] -> [(t, [a])]
 createCodeTable hclens labels = 
     gen_code_table ans_sorted
@@ -283,6 +270,51 @@ createCodeTable hclens labels =
         gen_code_table ((ans, (code_len, label)):xs) = (label, make_BitVector ans code_len) : gen_code_table xs
         gen_code_table [] = []
 
+-- define Huffman tree & nodes
+
+data InternalNode a = InternalNode {
+    zero :: Node a, -- left
+    one :: Node a -- right
+} deriving (Show)
+
+data Node a = EmptyNode
+            | LeafNode { label :: a }
+    deriving (Show)
+
+type HuffmanTree = InternalNode
+
+setIndex :: (Eq a, Num a) => Node a1 -> a -> InternalNode a1
+setIndex value direction =
+    case direction of
+        0 -> InternalNode {
+                zero = value,
+                one = EmptyNode
+            }
+        1 -> InternalNode {
+                zero = EmptyNode,
+                one = value
+            }
+
+getIndex :: (Eq a, Num a) => InternalNode a1 -> a -> Node a1 
+getIndex node dir = 
+    case dirBool of
+        True -> one node
+        False -> zero node
+    where dirBool = if dir == 1 then True else False
+
+--read_first_tree bs hclen =
+--    first_tree
+--    where 
+--        labels = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
+--        _hclens = map (\x -> readBitsInv(bs, 3)) [1..(hclen + 4)]
+--        code_table = createCodeTable(_hclens, labels)
+--        first_tree = createHuffmanTree(code_table)
+
+--addItem root label code@(x:xs) = 
+
+--createHuffmanTree code_table =
+
+-- rudimentary inflate func for now
 inflate = do
     (metadata, handle) <- getGZipMetadata
     arr <- newIORef []
