@@ -272,34 +272,45 @@ createCodeTable hclens labels =
 
 -- define Huffman tree & nodes
 
-data InternalNode a = InternalNode {
-    zero :: Node a, -- left
-    one :: Node a -- right
-} deriving (Show)
+--data InternalNode a = InternalNode {
+--    zero :: IORef (Node a), -- left
+--    one :: IORef (Node a) -- right
+--}
 
 data Node a = EmptyNode
             | LeafNode { label :: a }
-    deriving (Show)
+            | InternalNode {
+                    zero :: IORef (Node a),  -- left
+                    one :: IORef (Node a)  -- right
+                }
 
-type HuffmanTree = InternalNode
+type HuffmanTree = Node
 
-setIndex :: (Eq a, Num a) => Node a1 -> a -> InternalNode a1
-setIndex value direction =
+initInternalNode :: IO (Node a) -- InternalNode
+initInternalNode = do
+    _zero <- newIORef $ EmptyNode
+    _one <- newIORef $ EmptyNode
+
+    return $ InternalNode {
+                zero = _zero,
+                one = _one
+            }   
+                        -- Internal Node
+setIndex :: (Eq a, Num a) => Node a1 -> Node a1 -> a -> IO ()
+setIndex node value direction =
     case direction of
-        0 -> InternalNode {
-                zero = value,
-                one = EmptyNode
-            }
-        1 -> InternalNode {
-                zero = EmptyNode,
-                one = value
-            }
+        0 -> do writeIORef (zero node) value
+        1 -> do writeIORef (one node) value
 
-getIndex :: (Eq a, Num a) => InternalNode a1 -> a -> Node a1 
+                                -- Internal Node
+getIndex :: (Eq a, Monad m, Num a) => Node a1 -> a -> m (IORef (Node a1))
 getIndex node dir = 
     case dirBool of
-        True -> one node
-        False -> zero node
+        True    -> do 
+                    return $ one node
+        False   -> do
+                    return $ zero node
+
     where dirBool = if dir == 1 then True else False
 
 --read_first_tree bs hclen =
@@ -310,7 +321,22 @@ getIndex node dir =
 --        code_table = createCodeTable(_hclens, labels)
 --        first_tree = createHuffmanTree(code_table)
 
---addItem root label code@(x:xs) = 
+addItem :: (Eq a, Num a) => Node (Node a1 -> a1) -> (Node a1 -> a1) -> [a] -> IO ()
+addItem root _label [x] = do
+                val <- getIndex root (x)
+                writeIORef val (LeafNode _label)
+
+addItem root _label code@(x:xs) = do
+    node_val <- getIndex root (x)
+    child <- initInternalNode
+    _node_val <- readIORef node_val
+
+    case _node_val of 
+        (LeafNode x)            -> addItem _node_val label xs
+        (InternalNode x y)      -> addItem _node_val label xs
+        _                       -> do 
+                                    writeIORef node_val child
+                                    addItem child label xs            
 
 --createHuffmanTree code_table =
 
