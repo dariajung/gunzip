@@ -8,6 +8,7 @@ import Text.Printf (printf)
 import System.IO 
 import Data.Bits
 import Data.IORef
+import qualified Data.List as L
 
 
 gzfile = "keats.txt.gz"
@@ -17,7 +18,6 @@ type GZipFlags = Word8
 data BitStream = BitStream {
     stream :: Handle,
     bv :: IORef [Int] 
-    -- not sure how bit vectors work in haskell so just using [Int] as a BV
     -- IORef allows mutability
 }
 
@@ -178,6 +178,12 @@ makeBitVector x = helper (fromIntegral x) []
             | length l == 8     = l
             | otherwise         =  helper (n `shiftR` 1) (l ++ [n .&. 0x1])
 
+make_BitVector x len = helper (fromIntegral x) []
+    where 
+        helper n l
+            | length l == len       = l
+            | otherwise             =  helper (n `shiftR` 1) ((n .&. 0x1) : l)
+
 -- interprets binary param as in little endian format
 makeInt :: [Int] -> Int
 makeInt l = helper 0x00 l
@@ -227,15 +233,6 @@ getBlockFormat bs = do
                 blockType = btype
             } 
 
-inflate = do
-    (metadata, handle) <- getGZipMetadata
-    arr <- newIORef []
-    let bs = BitStream {
-                stream = handle,
-                bv = arr
-            }
-
-    getHuffmanHeader bs
 
 getHuffmanHeader :: BitStream -> IO HuffmanHeader
 getHuffmanHeader bstream = do
@@ -252,5 +249,48 @@ getHuffmanHeader bstream = do
                 hdist = fromIntegral dist,
                 hclen = fromIntegral len
             }
+
+-- define Huffman tree & nodes
+
+data InternalNode a = InternalNode {
+    zero :: Node a, -- left
+    one :: Node a -- right
+} deriving (Show)
+
+data Node a = EmptyNode
+            | LeafNode { label :: a }
+    deriving (Show)
+
+type HuffmanTree = InternalNode
+
+createCodeTable :: (Num a, Ord t, Bits a) => [Int] -> [t] -> [(t, [a])]
+createCodeTable hclens labels = 
+    gen_code_table ans_sorted
+
+    where 
+        not_zero_indicies = map (==0) hclens
+        _hclens = filter (not . (==0)) hclens
+        (_labels, bools) = unzip $ filter (\(x,y) -> y == False) $ zip labels not_zero_indicies
+        _sorted_pair = L.sort $ zip _hclens _labels
+        answers = take (length _hclens) $ helper _sorted_pair 0 [0]
+        ans_sorted = zip answers _sorted_pair
+
+        helper [] _ arr = arr
+        helper (x@(code_len, label):xs) prev_code_len arr
+            | code_len == prev_code_len         = helper xs code_len (arr ++ [prev_code_len + 1])
+            | otherwise                         = helper xs code_len (arr ++ [(prev_code_len + 1) `shiftL` (code_len - prev_code_len)])
+
+        gen_code_table ((ans, (code_len, label)):xs) = (label, make_BitVector ans code_len) : gen_code_table xs
+        gen_code_table [] = []
+
+inflate = do
+    (metadata, handle) <- getGZipMetadata
+    arr <- newIORef []
+    let bs = BitStream {
+                stream = handle,
+                bv = arr
+            }
+
+    getHuffmanHeader bs
 
 
