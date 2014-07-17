@@ -9,6 +9,9 @@ import System.IO
 import Data.Bits
 import Data.IORef
 import qualified Data.List as L
+-- UNSAFE!!! FOR DEBUGGING PURPOSES ONLY. 
+-- WILL BE REMOVED LATER.
+import System.IO.Unsafe
 
 
 gzfile = "keats.txt.gz"
@@ -283,6 +286,8 @@ data Node a = EmptyNode
                     zero :: IORef (Node a),  -- left
                     one :: IORef (Node a)  -- right
                 }
+    deriving (Show)
+
 
 type HuffmanTree = Node
 
@@ -321,7 +326,8 @@ getIndex node dir =
 --        code_table = createCodeTable(_hclens, labels)
 --        first_tree = createHuffmanTree(code_table)
 
-addItem :: (Eq a, Num a) => Node (Node a1 -> a1) -> (Node a1 -> a1) -> [a] -> IO ()
+-- root should be an internal node
+--addItem :: (Eq a, Num a) => Node (Node a1 -> a1) -> (Node a1 -> a1) -> [a] -> IO ()
 addItem root _label [x] = do
                 val <- getIndex root (x)
                 writeIORef val (LeafNode _label)
@@ -332,11 +338,11 @@ addItem root _label code@(x:xs) = do
     _node_val <- readIORef node_val
 
     case _node_val of 
-        (LeafNode x)            -> addItem _node_val label xs
-        (InternalNode x y)      -> addItem _node_val label xs
+        (LeafNode x)            -> addItem _node_val _label xs
+        (InternalNode x y)      -> addItem _node_val _label xs
         _                       -> do 
                                     writeIORef node_val child
-                                    addItem child label xs            
+                                    addItem child _label xs            
 
 --createHuffmanTree code_table =
 
@@ -349,6 +355,13 @@ inflate = do
                 bv = arr
             }
 
-    getHuffmanHeader bs
+    root <- initInternalNode
 
+    addItem root 6 [1,0,1,0]
+
+    print "hi"
+
+-- UNSAFE!!! For debugging purposes ONLY            
+instance (Show a) => Show (IORef a) where
+    show a = show (unsafePerformIO (readIORef a))
 
