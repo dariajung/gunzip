@@ -287,7 +287,7 @@ data InternalNode a = EmptyNode
     deriving (Show)
 
 
-type HuffmanTree = InternalNode
+type HuffmanTree a = InternalNode a
 
 initInternalNode :: IO (InternalNode a) -- InternalNode
 initInternalNode = do
@@ -349,7 +349,7 @@ read_first_tree bs hclen = do
         first_tree = createHuffmanTree code_table
     first_tree
 
-read_huffman_bits :: BitStream -> InternalNode a1 -> IO a1
+read_huffman_bits :: BitStream -> HuffmanTree a1 -> IO a1
 read_huffman_bits bs tree =
     let n = tree
     in helper n
@@ -364,9 +364,35 @@ read_huffman_bits bs tree =
                                 val <- readIORef _val
                                 helper val
 
+read_second_tree :: (Eq a, Num a) => BitStream -> HuffmanHeader -> InternalNode a -> IO [a]
+read_second_tree bs header tree =
+    let n_to_read = fromIntegral $ hlit header + hdist header + 258
+    in helper 0 [] n_to_read
 
-
---read_second_tree bs header tree = do 
+    where helper count vals to_read =
+            case loop of
+                True -> do 
+                        code_len <- read_huffman_bits bs tree
+                        case code_len of
+                            16      -> do 
+                                        _n_repeat <- readBitsInv bs 2
+                                        let n_repeat = _n_repeat + 3
+                                            arr = take n_repeat $ repeat (vals !! count)
+                                        helper (count + n_repeat) (vals ++ arr) to_read
+                            17      -> do
+                                        _n_zeros <- readBitsInv bs 3
+                                        let n_zeros = _n_zeros + 3 
+                                            arr = take n_zeros $ repeat 0
+                                        helper (count + n_zeros) (vals ++ arr) to_read
+                            18      -> do
+                                        _n_zeros <- readBitsInv bs 7 
+                                        let n_zeros = _n_zeros + 11
+                                            arr = take n_zeros $ repeat 0
+                                        helper (count + n_zeros) (vals ++ arr) to_read
+                            _       -> helper (count + 1) (vals ++ [code_len]) to_read
+                False -> return vals
+                where 
+                    loop = (count < to_read)
 
 -- rudimentary inflate func for now
 inflate = do
