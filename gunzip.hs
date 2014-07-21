@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module GunZip where
 
 import qualified Data.ByteString as B
@@ -12,6 +14,7 @@ import qualified Data.List as L
 -- UNSAFE!!! FOR DEBUGGING PURPOSES ONLY. 
 -- WILL BE REMOVED LATER.
 import System.IO.Unsafe
+import Control.Monad
 
 
 gzfile = "keats.txt.gz"
@@ -253,7 +256,7 @@ getHuffmanHeader bstream = do
                 hclen = fromIntegral len
             }
 
-createCodeTable :: (Num a, Ord t, Bits a) => [Int] -> [t] -> [(t, [a])]
+createCodeTable :: (Num Int, Ord t, Bits Int) => [Int] -> [t] -> [(t, [Int])]
 createCodeTable hclens labels = 
     gen_code_table ans_sorted
 
@@ -275,17 +278,12 @@ createCodeTable hclens labels =
 
 -- define Huffman tree & nodes
 
---data InternalNode a = InternalNode {
---    zero :: IORef (Node a), -- left
---    one :: IORef (Node a) -- right
---}
-
 data InternalNode a = EmptyNode
-            | LeafNode { label :: a }
-            | InternalNode {
-                    zero :: IORef (InternalNode a),  -- left
-                    one :: IORef (InternalNode a)  -- right
-                }
+                    | LeafNode { label :: a }
+                    | InternalNode {
+                            zero :: IORef (InternalNode a),  -- left
+                            one :: IORef (InternalNode a)  -- right
+                        }
     deriving (Show)
 
 
@@ -318,19 +316,12 @@ getIndex node dir =
 
     where dirBool = if dir == 1 then True else False
 
---read_first_tree bs hclen =
---    first_tree
---    where 
---        labels = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
---        _hclens = map (\x -> readBitsInv(bs, 3)) [1..(hclen + 4)]
---        code_table = createCodeTable(_hclens, labels)
---        first_tree = createHuffmanTree(code_table)
-
 -- root should be an internal node
---addItem :: (Eq a, Num a) => Node (Node a1 -> a1) -> (Node a1 -> a1) -> [a] -> IO ()
 addItem root _label [x] = do
                 val <- getIndex root (x)
                 writeIORef val (LeafNode _label)
+
+                print root
 
 addItem root _label code@(x:xs) = do
     node_val <- getIndex root (x)
@@ -344,7 +335,19 @@ addItem root _label code@(x:xs) = do
                                     writeIORef node_val child
                                     addItem child _label xs            
 
---createHuffmanTree code_table =
+createHuffmanTree :: (Eq a1, Num a1, Show a) => [(a, [a1])] -> IO (InternalNode a)
+createHuffmanTree code_table = do
+    root <- initInternalNode
+    let addedItems = map (\(label, codes) -> addItem root label codes) code_table
+
+    return root
+
+read_first_tree bs hclen = do
+    let labels = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
+    _hclens <- sequence $ map (\x -> readBitsInv bs 3) [1..(hclen + 4)]
+    let code_table = createCodeTable _hclens labels
+        first_tree = createHuffmanTree code_table
+    first_tree
 
 -- rudimentary inflate func for now
 inflate = do
