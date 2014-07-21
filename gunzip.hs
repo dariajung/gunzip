@@ -321,8 +321,6 @@ addItem root _label [x] = do
                 val <- getIndex root (x)
                 writeIORef val (LeafNode _label)
 
-                print root
-
 addItem root _label code@(x:xs) = do
     node_val <- getIndex root (x)
     child <- initInternalNode
@@ -342,12 +340,33 @@ createHuffmanTree code_table = do
 
     return root
 
+-- returns IO InternalNode
 read_first_tree bs hclen = do
+    -- Whoa, list of labels from GZip specs. Thanks, Julia.
     let labels = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
     _hclens <- sequence $ map (\x -> readBitsInv bs 3) [1..(hclen + 4)]
     let code_table = createCodeTable _hclens labels
         first_tree = createHuffmanTree code_table
     first_tree
+
+read_huffman_bits :: BitStream -> InternalNode a1 -> IO a1
+read_huffman_bits bs tree =
+    let n = tree
+    in helper n
+    where 
+        helper node =
+            case node of
+                (LeafNode x)    -> return $ label node
+                _           -> do 
+                                _bit <- readBits bs 1
+                                let bit = head _bit
+                                _val <- getIndex node bit
+                                val <- readIORef _val
+                                helper val
+
+
+
+--read_second_tree bs header tree = do 
 
 -- rudimentary inflate func for now
 inflate = do
@@ -360,9 +379,9 @@ inflate = do
 
     root <- initInternalNode
 
-    addItem root 6 [1,0,1,0]
+    addItem root 6 [0,0,0,0,1,0,1,0]
 
-    print "hi"
+    print root
 
 -- UNSAFE!!! For debugging purposes ONLY            
 instance (Show a) => Show (IORef a) where
