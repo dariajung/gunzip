@@ -280,18 +280,18 @@ createCodeTable hclens labels =
 --    one :: IORef (Node a) -- right
 --}
 
-data Node a = EmptyNode
+data InternalNode a = EmptyNode
             | LeafNode { label :: a }
             | InternalNode {
-                    zero :: IORef (Node a),  -- left
-                    one :: IORef (Node a)  -- right
+                    zero :: IORef (InternalNode a),  -- left
+                    one :: IORef (InternalNode a)  -- right
                 }
     deriving (Show)
 
 
-type HuffmanTree = Node
+type HuffmanTree = InternalNode
 
-initInternalNode :: IO (Node a) -- InternalNode
+initInternalNode :: IO (InternalNode a) -- InternalNode
 initInternalNode = do
     _zero <- newIORef $ EmptyNode
     _one <- newIORef $ EmptyNode
@@ -301,14 +301,14 @@ initInternalNode = do
                 one = _one
             }   
                         -- Internal Node
-setIndex :: (Eq a, Num a) => Node a1 -> Node a1 -> a -> IO ()
+setIndex :: (Eq a, Num a) => InternalNode a1 -> InternalNode a1 -> a -> IO ()
 setIndex node value direction =
     case direction of
         0 -> do writeIORef (zero node) value
         1 -> do writeIORef (one node) value
 
                                 -- Internal Node
-getIndex :: (Eq a, Monad m, Num a) => Node a1 -> a -> m (IORef (Node a1))
+getIndex :: (Eq a, Monad m, Num a) => InternalNode a1 -> a -> m (IORef (InternalNode a1))
 getIndex node dir = 
     case dirBool of
         True    -> do 
