@@ -462,7 +462,7 @@ inner_inflate_block decoded_text bs literal_tree distance_tree = do
 
     helper code decoded_text bs literal_tree distance_tree
 
--- rudimentary inflate func for now
+inflate :: IO ()
 inflate = do
     (metadata, handle) <- getGZipMetadata
     arr <- newIORef []
@@ -470,12 +470,24 @@ inflate = do
                 stream = handle,
                 bv = arr
             }
+    bf <- getBlockFormat bs
+    bType <- readIORef $ blockType bf
+        
+    let helper bf bType decoded_text =
+            case bType of 
+                [False, True]       -> do 
+                                        dT <- inflate_block decoded_text bs
+                                        _bf <- getBlockFormat bs
+                                        _bType <- readIORef $ blockType bf
+                                        let finished = GunZip.last bf
+                                        if finished then return dT else (helper _bf _bType dT)
+                _                   -> error $ "OH NO!"
 
-    root <- initInternalNode
+            
+    decoded <- helper bf bType []
+    let ascii = map (\x -> chr (fromIntegral x)) decoded
 
-    addItem root 6 [0,0,0,0,1,0,1,0]
-
-    print root
+    print ascii
 
 -- UNSAFE!!! For debugging purposes ONLY            
 instance (Show a) => Show (IORef a) where
