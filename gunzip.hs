@@ -394,6 +394,23 @@ read_second_tree bs header tree =
                 where 
                     loop = (count < to_read)
 
+read_distance_tree bs distance_tree = do
+    let extra_dist_addend = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576]
+        helper distBool bs distance =
+            case distBool of
+                True        -> do
+                                extra_dist <- readBitsInv bs (div (distance - 2) 2)
+                                let distance = extra_dist + (extra_dist_addend !! (distance - 4))
+                                return distance
+                False       -> return distance
+
+    distance <- read_huffman_bits bs distance_tree
+    dist <- helper (distance > 3) bs distance
+
+    -- either dist or dist + 1 OFF BY ONE OMG
+    return dist 
+
+
 -- rudimentary inflate func for now
 inflate = do
     (metadata, handle) <- getGZipMetadata
