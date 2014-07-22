@@ -55,7 +55,7 @@ data HuffmanHeader = HuffmanHeader {
     hlit :: Word8,
     hdist :: Word8,
     hclen :: Word8
-}
+} deriving (Show)
 
 -- translate bytes to binary
 toBool (x:xs)
@@ -252,20 +252,23 @@ getHuffmanHeader bstream = do
                 hclen = fromIntegral len
             }
 
+-- NEED TO DEBUG THIS
 createCodeTable :: (Num Int, Ord t, Bits Int) => [Int] -> [t] -> [(t, [Int])]
 createCodeTable hclens labels = 
     gen_code_table ans_sorted
 
     where 
-        not_zero_indicies = map (==0) hclens
+        not_zero_indicies = map (not . (==0)) hclens
         _hclens = filter (not . (==0)) hclens
-        (_labels, bools) = unzip $ filter (\(x,y) -> y == False) $ zip labels not_zero_indicies
+        (_labels, bools) = unzip $ filter (\(x,y) -> y == True) $ zip labels not_zero_indicies
         _sorted_pair = L.sort $ zip _hclens _labels
+
+        -- everything good until this point
         answers = take (length _hclens) $ helper _sorted_pair 0 [0]
         ans_sorted = zip answers _sorted_pair
 
         helper [] _ arr = arr
-        helper (x@(code_len, label):xs) prev_code_len arr
+        helper ((code_len, label):xs) prev_code_len arr
             | code_len == prev_code_len         = helper xs code_len (arr ++ [prev_code_len + 1])
             | otherwise                         = helper xs code_len (arr ++ [(prev_code_len + 1) `shiftL` (code_len - prev_code_len)])
 
@@ -341,10 +344,12 @@ read_first_tree bs hclen = do
     -- Whoa, list of labels from GZip specs. Thanks, Julia.
     let labels = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
     _hclens <- sequence $ map (\x -> readBitsInv bs 3) [1..(hclen + 4)]
+    print _hclens
     let code_table = createCodeTable _hclens labels
         first_tree = createHuffmanTree code_table
     first_tree
 
+-- uh so this NEVER receives anything with an emptynode?
 read_huffman_bits :: BitStream -> HuffmanTree a1 -> IO a1
 read_huffman_bits bs tree =
     let n = tree
@@ -353,14 +358,13 @@ read_huffman_bits bs tree =
         helper node =
             case node of
                 (LeafNode x)    -> return $ label node
-                _           -> do 
-                                _bit <- readBits bs 1
-                                let bit = head _bit
-                                _val <- getIndex node bit
-                                val <- readIORef _val
-                                helper val
+                _               -> do 
+                                    _bit <- readBits bs 1
+                                    let bit = head _bit
+                                    _val <- getIndex node bit
+                                    val <- readIORef _val
+                                    helper val
 
-read_second_tree :: (Eq a, Num a) => BitStream -> HuffmanHeader -> InternalNode a -> IO [a]
 read_second_tree bs header tree =
     let n_to_read = fromIntegral $ hlit header + hdist header + 258
     in helper 0 [] n_to_read
@@ -432,6 +436,7 @@ copy_text decoded_text distance len
 inflate_block decoded_text bs = do 
     header <- getHuffmanHeader bs
     first_tree <- read_first_tree bs (hclen header)
+
     codes <- read_second_tree bs header first_tree
 
     let literal_codes = take (256 + (fromIntegral $ hlit header)) codes
