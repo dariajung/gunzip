@@ -394,6 +394,7 @@ read_second_tree bs header tree =
                 where 
                     loop = (count < to_read)
 
+read_distance_tree :: BitStream -> HuffmanTree Int -> IO Int
 read_distance_tree bs distance_tree = do
     let extra_dist_addend = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576]
         helper distBool bs distance =
@@ -409,6 +410,20 @@ read_distance_tree bs distance_tree = do
 
     -- either dist or dist + 1 OFF BY ONE OMG
     return dist 
+
+read_length_code :: BitStream -> Int -> IO Int
+read_length_code bs length_code = do 
+    let extra_length_addend = [11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227]
+        helper length_code =
+            case (length_code < 265) of
+                True                -> return (length_code - 254)
+                False               -> do 
+                                        extra_bits <- readBitsInv bs (div (length_code - 261)  4)
+                                        return $ extra_bits + (extra_length_addend !! (length_code - 265))
+
+    len_code <- helper length_code
+
+    return len_code
 
 
 -- rudimentary inflate func for now
