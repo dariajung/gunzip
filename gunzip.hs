@@ -252,8 +252,7 @@ getHuffmanHeader bstream = do
                 hclen = fromIntegral len
             }
 
--- NEED TO DEBUG THIS
-createCodeTable :: (Num Int, Ord t, Bits Int) => [Int] -> [t] -> [(t, [Int])]
+createCodeTable :: (Num Int, Ord Int, Bits Int) => [Int] -> [Int] -> [(Int, [Int])]
 createCodeTable hclens labels = 
     gen_code_table ans_sorted
 
@@ -263,14 +262,15 @@ createCodeTable hclens labels =
         (_labels, bools) = unzip $ filter (\(x,y) -> y == True) $ zip labels not_zero_indicies
         _sorted_pair = L.sort $ zip _hclens _labels
 
-        -- everything good until this point
-        answers = take (length _hclens) $ helper _sorted_pair 0 [0]
+        answers = take (length _hclens) $ helper _sorted_pair 1 0 []
         ans_sorted = zip answers _sorted_pair
 
-        helper [] _ arr = arr
-        helper ((code_len, label):xs) prev_code_len arr
-            | code_len == prev_code_len         = helper xs code_len (arr ++ [prev_code_len + 1])
-            | otherwise                         = helper xs code_len (arr ++ [(prev_code_len + 1) `shiftL` (code_len - prev_code_len)])
+        helper :: [(Int, Int)] -> Int -> Int -> [Int] -> [Int]
+        helper [] _ _ arr = arr
+        helper ((code_len, label):xs) count prev_code_len arr
+            | count == 1                = helper xs (count + 1) code_len (arr ++ [0])
+            | code_len == prev_code_len = helper xs (count + 1) code_len (arr ++ [(arr !! (count - 2)) + 1])
+            | otherwise                 = helper xs (count + 1) code_len (arr ++ [((arr !! (count - 2)) + 1) `shiftL` (code_len - prev_code_len)])
 
         gen_code_table ((ans, (code_len, label)):xs) = (label, make_BitVector ans code_len) : gen_code_table xs
         gen_code_table [] = []
@@ -332,7 +332,7 @@ addItem root _label code@(x:xs) = do
                                     writeIORef node_val child
                                     addItem child _label xs            
 
-createHuffmanTree :: (Eq a1, Num a1, Show a) => [(a, [a1])] -> IO (InternalNode a)
+--createHuffmanTree :: (Eq a1, Num a1, Show a) => [(a, [a1])] -> IO (InternalNode a)
 createHuffmanTree code_table = do
     root <- initInternalNode
     let addedItems = map (\(label, codes) -> addItem root label codes) code_table
