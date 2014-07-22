@@ -424,9 +424,12 @@ read_length_code bs length_code = do
     len_code <- helper length_code
     return len_code
 
-
-copy_text decoded_text distance len = decoded_text ++ (take len $ drop (length(decoded_text) - distance) decoded_text)
-
+copy_text decoded_text distance len
+    | (length shortened) > len      = decoded_text ++ toCopy 
+    | otherwise                     = decoded_text ++ (concat $ replicate (len - (length toCopy)) toCopy)
+    where 
+        shortened = drop (length(decoded_text) - distance) decoded_text
+        toCopy = take len shortened
 
 -- rudimentary inflate func for now
 inflate = do
@@ -446,4 +449,3 @@ inflate = do
 -- UNSAFE!!! For debugging purposes ONLY            
 instance (Show a) => Show (IORef a) where
     show a = show (unsafePerformIO (readIORef a))
-
