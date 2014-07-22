@@ -246,10 +246,6 @@ getHuffmanHeader bstream = do
     dist <- readBitsInv bstream 5
     len <- readBitsInv bstream 4
 
-    print lit
-    print dist
-    print len
-
     return $ HuffmanHeader {
                 hlit = fromIntegral lit,
                 hdist = fromIntegral dist,
@@ -394,8 +390,8 @@ read_second_tree bs header tree =
                 where 
                     loop = (count < to_read)
 
-read_distance_tree :: BitStream -> HuffmanTree Int -> IO Int
-read_distance_tree bs distance_tree = do
+read_distance_code :: BitStream -> HuffmanTree Int -> IO Int
+read_distance_code bs distance_tree = do
     let extra_dist_addend = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576]
         helper distBool bs distance =
             case distBool of
@@ -424,12 +420,47 @@ read_length_code bs length_code = do
     len_code <- helper length_code
     return len_code
 
+copy_text :: [a] -> Int -> Int -> [a]
 copy_text decoded_text distance len
     | (length shortened) > len      = decoded_text ++ toCopy 
     | otherwise                     = decoded_text ++ (concat $ replicate (len - (length toCopy)) toCopy)
     where 
         shortened = drop (length(decoded_text) - distance) decoded_text
         toCopy = take len shortened
+
+-- um, really afraid of off by one errors
+inflate_block decoded_text bs = do 
+    header <- getHuffmanHeader bs
+    first_tree <- read_first_tree bs (hclen header)
+    codes <- read_second_tree bs header first_tree
+
+    let literal_codes = take (256 + (fromIntegral $ hlit header)) codes
+        lit_code_table = createCodeTable literal_codes [0..((length literal_codes) - 1)]
+    literal_tree <- createHuffmanTree lit_code_table
+
+    let distance_codes = drop ((length codes) - (fromIntegral $ hdist header) - 1) codes
+        dist_code_table = createCodeTable distance_codes [0..((length distance_codes) - 1)]
+    distance_tree <- createHuffmanTree dist_code_table
+
+    inner_inflate_block decoded_text bs literal_tree distance_tree
+
+inner_inflate_block decoded_text bs literal_tree distance_tree = do
+    code <- read_huffman_bits bs literal_tree
+    let helper code decoded_text bs literal_tree distance_tree =
+            case codeCase of 
+                "equal"         -> return decoded_text
+                "lesseq"        -> do 
+                                    newCode <- read_huffman_bits bs literal_tree
+                                    helper newCode (decoded_text ++ [fromIntegral code]) bs literal_tree distance_tree
+                "greater"       -> do 
+                                    len <- read_length_code bs code
+                                    distance <- read_distance_code bs distance_tree
+                                    let copied = copy_text decoded_text distance len
+                                    newCode <- read_huffman_bits bs literal_tree
+                                    helper newCode copied bs literal_tree distance_tree 
+            where codeCase = if code == 256 then "equal" else if code <= 255 then "lesseq" else "greater"
+
+    helper code decoded_text bs literal_tree distance_tree
 
 -- rudimentary inflate func for now
 inflate = do
