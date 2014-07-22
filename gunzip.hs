@@ -377,17 +377,17 @@ read_second_tree bs header tree =
                             16      -> do 
                                         _n_repeat <- readBitsInv bs 2
                                         let n_repeat = _n_repeat + 3
-                                            arr = take n_repeat $ repeat (vals !! count)
+                                            arr = replicate n_repeat (vals !! count)
                                         helper (count + n_repeat) (vals ++ arr) to_read
                             17      -> do
                                         _n_zeros <- readBitsInv bs 3
                                         let n_zeros = _n_zeros + 3 
-                                            arr = take n_zeros $ repeat 0
+                                            arr = replicate n_zeros 0
                                         helper (count + n_zeros) (vals ++ arr) to_read
                             18      -> do
                                         _n_zeros <- readBitsInv bs 7 
                                         let n_zeros = _n_zeros + 11
-                                            arr = take n_zeros $ repeat 0
+                                            arr = replicate n_zeros 0
                                         helper (count + n_zeros) (vals ++ arr) to_read
                             _       -> helper (count + 1) (vals ++ [code_len]) to_read
                 False -> return vals
@@ -422,8 +422,10 @@ read_length_code bs length_code = do
                                         return $ extra_bits + (extra_length_addend !! (length_code - 265))
 
     len_code <- helper length_code
-
     return len_code
+
+
+copy_text decoded_text distance len = decoded_text ++ (take len $ drop (length(decoded_text) - distance) decoded_text)
 
 
 -- rudimentary inflate func for now
