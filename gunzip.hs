@@ -11,9 +11,6 @@ import System.IO
 import Data.Bits
 import Data.IORef
 import qualified Data.List as L
--- UNSAFE!!! FOR DEBUGGING PURPOSES ONLY. 
--- WILL BE REMOVED LATER.
-import System.IO.Unsafe
 import Control.Monad
 
 
@@ -283,8 +280,6 @@ data InternalNode a = EmptyNode
                             zero :: IORef (InternalNode a),  -- left
                             one :: IORef (InternalNode a)  -- right
                         }
-    deriving (Show)
-
 
 type HuffmanTree a = InternalNode a
 
@@ -332,11 +327,12 @@ addItem root _label code@(x:xs) = do
                                     writeIORef node_val child
                                     addItem child _label xs            
 
---createHuffmanTree :: (Eq a1, Num a1, Show a) => [(a, [a1])] -> IO (InternalNode a)
 createHuffmanTree code_table = do
     root <- initInternalNode
-    let addedItems = map (\(label, codes) -> addItem root label codes) code_table
 
+    --let added =  map (\(label, codes) -> addItem root label codes) code_table
+
+    added <- sequence $ map (\(label, codes) -> addItem root label codes) (code_table)
     return root
 
 -- returns IO InternalNode
@@ -344,12 +340,12 @@ read_first_tree bs hclen = do
     -- Whoa, list of labels from GZip specs. Thanks, Julia.
     let labels = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
     _hclens <- sequence $ map (\x -> readBitsInv bs 3) [1..(hclen + 4)]
-    print _hclens
+
+    -- debugged up to here, createCodeTable works now
     let code_table = createCodeTable _hclens labels
         first_tree = createHuffmanTree code_table
     first_tree
 
--- uh so this NEVER receives anything with an emptynode?
 read_huffman_bits :: BitStream -> HuffmanTree a1 -> IO a1
 read_huffman_bits bs tree =
     let n = tree
@@ -366,7 +362,7 @@ read_huffman_bits bs tree =
                                     helper val
 
 read_second_tree bs header tree =
-    let n_to_read = fromIntegral $ hlit header + hdist header + 258
+    let n_to_read = 258 + (fromIntegral $ hlit header + hdist header) :: Int
     in helper 0 [] n_to_read
 
     where helper count vals to_read =
@@ -394,22 +390,23 @@ read_second_tree bs header tree =
                 where 
                     loop = (count < to_read)
 
+-- lol this is breaking
 read_distance_code :: BitStream -> HuffmanTree Int -> IO Int
 read_distance_code bs distance_tree = do
     let extra_dist_addend = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576]
+        
         helper distBool bs distance =
             case distBool of
                 True        -> do
                                 extra_dist <- readBitsInv bs (div (distance - 2) 2)
-                                let distance = extra_dist + (extra_dist_addend !! (distance - 4))
-                                return distance
+                                let addend = (extra_dist_addend !! (distance - 4))
+                                    dist = extra_dist + addend
+                                return dist
                 False       -> return distance
 
     distance <- read_huffman_bits bs distance_tree
     dist <- helper (distance > 3) bs distance
-
-    -- either dist or dist + 1 OFF BY ONE OMG
-    return dist 
+    return $ dist + 1
 
 read_length_code :: BitStream -> Int -> IO Int
 read_length_code bs length_code = do 
@@ -436,24 +433,28 @@ copy_text decoded_text distance len
 inflate_block decoded_text bs = do 
     header <- getHuffmanHeader bs
     first_tree <- read_first_tree bs (hclen header)
-
     codes <- read_second_tree bs header first_tree
 
-    let literal_codes = take (256 + (fromIntegral $ hlit header)) codes
-        lit_code_table = createCodeTable literal_codes [0..((length literal_codes) - 1)]
+    let literal_codes = take (257 + (fromIntegral $ hlit header)) codes
+        lit_code_table = createCodeTable literal_codes [0..((length literal_codes - 1))]
+
     literal_tree <- createHuffmanTree lit_code_table
 
     let distance_codes = drop ((length codes) - (fromIntegral $ hdist header) - 1) codes
         dist_code_table = createCodeTable distance_codes [0..((length distance_codes) - 1)]
+
     distance_tree <- createHuffmanTree dist_code_table
 
     inner_inflate_block decoded_text bs literal_tree distance_tree
 
+
 inner_inflate_block decoded_text bs literal_tree distance_tree = do
+
     code <- read_huffman_bits bs literal_tree
     let helper code decoded_text bs literal_tree distance_tree =
             case codeCase of 
-                "equal"         -> return decoded_text
+                "equal"         -> do 
+                                    return decoded_text
                 "lesseq"        -> do 
                                     newCode <- read_huffman_bits bs literal_tree
                                     helper newCode (decoded_text ++ [fromIntegral code]) bs literal_tree distance_tree
@@ -461,6 +462,7 @@ inner_inflate_block decoded_text bs literal_tree distance_tree = do
                                     len <- read_length_code bs code
                                     distance <- read_distance_code bs distance_tree
                                     let copied = copy_text decoded_text distance len
+
                                     newCode <- read_huffman_bits bs literal_tree
                                     helper newCode copied bs literal_tree distance_tree 
             where codeCase = if code == 256 then "equal" else if code <= 255 then "lesseq" else "greater"
@@ -492,8 +494,4 @@ inflate = do
     decoded <- helper bf bType []
     let ascii = map (\x -> chr (fromIntegral x)) decoded
 
-    print ascii
-
--- UNSAFE!!! For debugging purposes ONLY            
-instance (Show a) => Show (IORef a) where
-    show a = show (unsafePerformIO (readIORef a))
+    putStrLn ascii
