@@ -273,7 +273,6 @@ createCodeTable hclens labels =
         gen_code_table [] = []
 
 -- define Huffman tree & nodes
-
 data InternalNode a = EmptyNode
                     | LeafNode { label :: a }
                     | InternalNode {
@@ -283,7 +282,7 @@ data InternalNode a = EmptyNode
 
 type HuffmanTree a = InternalNode a
 
-initInternalNode :: IO (InternalNode a) -- InternalNode
+initInternalNode :: IO (InternalNode a)
 initInternalNode = do
     _zero <- newIORef $ EmptyNode
     _one <- newIORef $ EmptyNode
@@ -292,14 +291,12 @@ initInternalNode = do
                 zero = _zero,
                 one = _one
             }   
-                        -- Internal Node
 setIndex :: (Eq a, Num a) => InternalNode a1 -> InternalNode a1 -> a -> IO ()
 setIndex node value direction =
     case direction of
         0 -> do writeIORef (zero node) value
         1 -> do writeIORef (one node) value
 
-                                -- Internal Node
 getIndex :: (Eq a, Monad m, Num a) => InternalNode a1 -> a -> m (IORef (InternalNode a1))
 getIndex node dir = 
     case dirBool of
@@ -310,7 +307,6 @@ getIndex node dir =
 
     where dirBool = if dir == 1 then True else False
 
--- root should be an internal node
 addItem root _label [x] = do
                 val <- getIndex root (x)
                 writeIORef val (LeafNode _label)
@@ -330,9 +326,7 @@ addItem root _label code@(x:xs) = do
 createHuffmanTree code_table = do
     root <- initInternalNode
 
-    --let added =  map (\(label, codes) -> addItem root label codes) code_table
-
-    added <- sequence $ map (\(label, codes) -> addItem root label codes) (code_table)
+    sequence $ map (\(label, codes) -> addItem root label codes) (code_table)
     return root
 
 -- returns IO InternalNode
@@ -340,8 +334,6 @@ read_first_tree bs hclen = do
     -- Whoa, list of labels from GZip specs. Thanks, Julia.
     let labels = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
     _hclens <- sequence $ map (\x -> readBitsInv bs 3) [1..(hclen + 4)]
-
-    -- debugged up to here, createCodeTable works now
     let code_table = createCodeTable _hclens labels
         first_tree = createHuffmanTree code_table
     first_tree
@@ -390,7 +382,6 @@ read_second_tree bs header tree =
                 where 
                     loop = (count < to_read)
 
--- lol this is breaking
 read_distance_code :: BitStream -> HuffmanTree Int -> IO Int
 read_distance_code bs distance_tree = do
     let extra_dist_addend = [4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576]
@@ -429,7 +420,6 @@ copy_text decoded_text distance len
         shortened = drop (length(decoded_text) - distance) decoded_text
         toCopy = take len shortened
 
--- um, really afraid of off by one errors
 inflate_block decoded_text bs = do 
     header <- getHuffmanHeader bs
     first_tree <- read_first_tree bs (hclen header)
